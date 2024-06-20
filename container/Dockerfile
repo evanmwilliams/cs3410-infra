@@ -11,28 +11,19 @@ FROM env AS toolchain
 COPY gitconfig /root/.gitconfig
 RUN git clone --recursive --shallow-submodules \
    https://github.com/riscv/riscv-gnu-toolchain
+# RUN apt-get update && \ 
+#     apt-get install libcrypt-dev && \ 
+#     apt-get clean
+# env C_INCLUDE_PATH $C_INCLUDE_PATH:/usr/include
 WORKDIR /riscv-gnu-toolchain
-RUN ./configure --prefix=/opt/riscv --with-arch=rv32g --with-abi=ilp32d && \
-   make -j2 linux
-
-FROM env AS spike
-COPY gitconfig /root/.gitconfig
-RUN apt-get update && \
-    apt-get install -y device-tree-compiler libboost-regex-dev \
-        libboost-system-dev libboost-thread-dev && \
-    apt-get clean
-RUN git clone \
-    https://github.com/riscv-software-src/riscv-isa-sim.git
-WORKDIR /riscv-isa-sim/build
-RUN ../configure --prefix=/opt/riscv --with-arch=rv32g && \
-    make && \
-    make install
+RUN ./configure --prefix=/opt/riscv --enable-libsanitizer && \
+   make -j8 linux
 
 FROM env AS qemu
 RUN curl -O https://download.qemu.org/qemu-9.0.0.tar.xz && \
     tar -xf qemu-9.0.0.tar.xz
 WORKDIR /qemu-9.0.0
-RUN ./configure --target-list=riscv32-linux-user && make -j
+RUN ./configure --target-list=riscv64-linux-user && make -j
 
 FROM docker.io/ubuntu:24.04
 RUN apt-get update && \
@@ -41,9 +32,8 @@ RUN apt-get update && \
     apt-get clean
 
 # Add the various tools.
-COPY --from=qemu /qemu-9.0.0/build/qemu-riscv32 /usr/local/bin/
+COPY --from=qemu /qemu-9.0.0/build/qemu-riscv64 /usr/local/bin/
 COPY --from=toolchain /opt/riscv /opt/riscv
-COPY --from=spike /opt/riscv /opt/riscv
 
 # Create unprefixed symlinks to the GNU tools.
 COPY mklinks.sh /
